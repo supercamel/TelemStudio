@@ -1,0 +1,37 @@
+# Build directories
+build-*/
+build/
+.sqgipkg/
+
+# Packaged output
+dist/
+dist-*/
+artifacts/
+*.AppImage
+*.AppDir/
+*.exe
+*.nsi
+
+# CMake / Ninja leftovers
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+build.ninja
+.ninja_deps
+.ninja_log
+
+# Generated / compiled binaries
+*.o
+*.so
+*.so.*
+*.dll
+*.dll.a
+*.a
+*.pc
+*.cnut
+
+# Local editor and OS noise
+.DS_Store
+*.swp
+*~
