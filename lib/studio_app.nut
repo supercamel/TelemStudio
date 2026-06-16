@@ -8,6 +8,7 @@ local D = import("lib/overlay_document.nut")
 local R = import("lib/overlay_renderer.nut")
 local P = import("lib/pipeline_controller.nut")
 local DS = import("lib/data_sources.nut")
+local PF = import("lib/project_file.nut")
 
 local APP_NAME = "Telem Studio"
 local APP_ID = "studio.telem.overlay"
@@ -231,6 +232,7 @@ class StudioApp {
     telemetry_label = null
     start_button = null
     stop_button = null
+    current_project_path = null
 
     source_kind_drop = null
     source_entry = null
@@ -423,6 +425,18 @@ class StudioApp {
         this.stop_button.set_sensitive(false)
         this.stop_button.connect("clicked", function() { this.stop_pipeline() }.bindenv(this))
         header.pack_start(this.stop_button)
+
+        local open_button = Gtk.Button.new_with_label("Open")
+        open_button.connect("clicked", function() { this.open_project_dialog() }.bindenv(this))
+        header.pack_end(open_button)
+
+        local save_as_button = Gtk.Button.new_with_label("Save As")
+        save_as_button.connect("clicked", function() { this.save_project_dialog() }.bindenv(this))
+        header.pack_end(save_as_button)
+
+        local save_button = Gtk.Button.new_with_label("Save")
+        save_button.connect("clicked", function() { this.save_project() }.bindenv(this))
+        header.pack_end(save_button)
         this.win.set_titlebar(header)
 
         local root = Gtk.Box.new(Gtk.Orientation.vertical, 0)
@@ -1233,6 +1247,103 @@ class StudioApp {
             dialog.destroy()
         }.bindenv(this))
         dialog.show()
+    }
+
+    function add_project_filter(dialog) {
+        local project_filter = Gtk.FileFilter.new()
+        project_filter.set_name("TelemStudio projects")
+        project_filter.add_pattern("*.telemstudio")
+        project_filter.add_pattern("*.json")
+        dialog.add_filter(project_filter)
+
+        local all_filter = Gtk.FileFilter.new()
+        all_filter.set_name("All files")
+        all_filter.add_pattern("*")
+        dialog.add_filter(all_filter)
+    }
+
+    function open_project_dialog() {
+        local dialog = Gtk.FileChooserNative.new("Open Project", this.win,
+            Gtk.FileChooserAction.open, "Open", "Cancel")
+        dialog.set_modal(true)
+        this.add_project_filter(dialog)
+        dialog.connect("response", function(response) {
+            if (response == Gtk.ResponseType.accept || response == Gtk.ResponseType.ok) {
+                local file = dialog.get_file()
+                if (file != null) {
+                    local path = file.get_path()
+                    if (path != null) this.load_project(path)
+                }
+            }
+            dialog.destroy()
+        }.bindenv(this))
+        dialog.show()
+    }
+
+    function save_project_dialog() {
+        local dialog = Gtk.FileChooserNative.new("Save Project", this.win,
+            Gtk.FileChooserAction.save, "Save", "Cancel")
+        dialog.set_modal(true)
+        dialog.set_current_name("overlay.telemstudio")
+        this.add_project_filter(dialog)
+        dialog.connect("response", function(response) {
+            if (response == Gtk.ResponseType.accept || response == Gtk.ResponseType.ok) {
+                local file = dialog.get_file()
+                if (file != null) {
+                    local path = file.get_path()
+                    if (path != null) this.save_project(path)
+                }
+            }
+            dialog.destroy()
+        }.bindenv(this))
+        dialog.show()
+    }
+
+    function save_project(path = null) {
+        if (path == null) path = this.current_project_path
+        if (path == null || path.len() == 0) {
+            this.save_project_dialog()
+            return
+        }
+
+        try {
+            this.apply_source_controls()
+            this.apply_data_source_controls()
+            this.apply_inspector()
+            PF.save_project(path, this.document, this.source_config, this.data_sources)
+            this.current_project_path = path
+            this.set_status("Saved project " + path)
+        } catch (e) {
+            this.set_status("Could not save project: " + e.tostring())
+        }
+    }
+
+    function load_project(path) {
+        try {
+            if (this.pipeline != null && this.pipeline.pipe != null) this.pipeline.stop()
+            if (this.data_sources != null) this.data_sources.stop()
+
+            local loaded = PF.load_project(path)
+            this.document = loaded.document
+            this.source_config = loaded.source
+            this.data_sources = DS.DataSourceManager(this.telemetry)
+            PF.apply_data_sources(this.data_sources, loaded.data_sources)
+            this.renderer = R.OverlayRenderer(this.document, this.telemetry)
+            this.pipeline = P.PipelineController(this.document, this.renderer, this.source_config)
+            this.pipeline.set_status_callback(function(text) { this.set_status(text) }.bindenv(this))
+            if (!this.shutting_down) this.data_sources.start()
+
+            this.current_project_path = path
+            this.refresh_source_controls()
+            this.refresh_data_source_controls()
+            this.rebuild_overlay_list()
+            this.refresh_inspector()
+            this.refresh_live_labels()
+            this.queue_preview()
+            this.set_status("Loaded project " + path)
+        } catch (e) {
+            this.set_status("Could not load project: " + e.tostring())
+        }
     }
 
     function open_image_overlay_dialog() {

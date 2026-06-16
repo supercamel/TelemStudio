@@ -54,7 +54,7 @@
     "build": [
       "cmake -E rm -rf \"$SQGI_WINDOWS_BUILD_DIR\"",
       "cmake -S \"$SQGI_SOURCE_DIR\" -B \"$SQGI_WINDOWS_BUILD_DIR\" -G Ninja -DCMAKE_TOOLCHAIN_FILE=\"$SQGI_WIN_CMAKE_TOOLCHAIN\" -DCMAKE_BUILD_TYPE=Release",
-      "cmake --build \"$SQGI_WINDOWS_BUILD_DIR\""
+      "cmake --build \"$SQGI_WINDOWS_BUILD_DIR\" --target sqgi sqgi-bin"
     ],
     "build_dir": "build-win",
     "gtk_theme": "SQGI-Violet-Dark",
