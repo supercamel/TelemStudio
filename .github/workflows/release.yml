@@ -78,7 +78,7 @@ jobs:
           mkdir -p artifacts
           cp dist-linux-x86_64/TelemStudio.AppImage    artifacts/TelemStudio-x86_64.AppImage
           cp dist-linux-aarch64/TelemStudio.AppImage   artifacts/TelemStudio-aarch64.AppImage
-          cp dist-windows/TelemStudio-Setup.exe        artifacts/TelemStudio-Setup.exe
+          cp dist-windows-x86_64/TelemStudio-Setup.exe        artifacts/TelemStudio-Setup.exe
           ls -lh artifacts
 
       - name: Upload build artifacts
