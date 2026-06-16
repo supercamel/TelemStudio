@@ -119,8 +119,8 @@ Output options are shown only when relevant:
 - `Custom sink`: advanced GStreamer sink chain.
 
 YouTube and Facebook outputs use H.264 video plus AAC audio in an FLV/RTMP
-stream. The audio track is silent unless a future project version adds audio
-input support.
+stream. When the input URI has audio, TelemStudio carries that audio into the
+stream. Sources without audio use a silent track for platform compatibility.
 
 ## Stream Keys
 

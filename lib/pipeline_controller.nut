@@ -62,21 +62,23 @@ class PipelineController {
         if (this.status_cb != null) this.status_cb(text)
     }
 
-    function source_description(num_buffers = 0) {
+    function source_element_description(num_buffers = 0) {
+        if (this.source.kind == "webcam") {
+            return "v4l2src device=" + this.source.device
+        }
+        if (this.source.kind == "uri" && this.source.uri.len() > 0) {
+            return "uridecodebin uri=" + this.source.uri
+        }
+        if (this.source.kind == "custom" && this.source.custom_source.len() > 0) {
+            return this.source.custom_source
+        }
+        local opts = num_buffers > 0 ? ("num-buffers=" + num_buffers + " is-live=false ") : "is-live=true "
+        return "videotestsrc " + opts + "pattern=" + this.source.test_pattern
+    }
+
+    function video_processing_description(src) {
         local caps = "video/x-raw,format=BGRA,width=" + this.source.width +
             ",height=" + this.source.height + ",framerate=" + this.source.fps + "/1"
-
-        local src = ""
-        if (this.source.kind == "webcam") {
-            src = "v4l2src device=" + this.source.device
-        } else if (this.source.kind == "uri" && this.source.uri.len() > 0) {
-            src = "uridecodebin uri=" + this.source.uri
-        } else if (this.source.kind == "custom" && this.source.custom_source.len() > 0) {
-            src = this.source.custom_source
-        } else {
-            local opts = num_buffers > 0 ? ("num-buffers=" + num_buffers + " is-live=false ") : "is-live=true "
-            src = "videotestsrc " + opts + "pattern=" + this.source.test_pattern
-        }
 
         local chain = src + " ! queue ! videoconvert"
         if (this.source.deinterlace) chain += " ! deinterlace"
@@ -89,6 +91,10 @@ class PipelineController {
         }
         if (this.source.flip != "none") chain += " ! videoflip method=" + this.source.flip
         return chain + " ! videorate ! videoscale ! " + caps
+    }
+
+    function source_description(num_buffers = 0) {
+        return this.video_processing_description(this.source_element_description(num_buffers))
     }
 
     function encoder_description() {
@@ -113,11 +119,31 @@ class PipelineController {
         return "avenc_aac bitrate=128000"
     }
 
-    function live_rtmp_sink_description() {
-        return this.live_video_encoder_description() + " ! queue ! live_mux.video " +
-            "audiotestsrc is-live=true wave=silence ! audioconvert ! audioresample ! " +
+    function audio_encoder_description() {
+        if (this.source.container == "webm") return "opusenc bitrate=128000"
+        return this.aac_encoder_description() + " ! aacparse"
+    }
+
+    function decoded_audio_to_mux_description(src, mux_name) {
+        return src + " ! queue ! audioconvert ! audioresample ! audio/x-raw,rate=44100,channels=2 ! " +
+            this.audio_encoder_description() + " ! queue ! " + mux_name + "."
+    }
+
+    function silent_audio_to_mux_description(mux_name) {
+        return "audiotestsrc is-live=true wave=silence ! audioconvert ! audioresample ! " +
             "audio/x-raw,rate=44100,channels=2 ! " + this.aac_encoder_description() +
-            " ! aacparse ! queue ! live_mux.audio " +
+            " ! aacparse ! queue ! " + mux_name + "."
+    }
+
+    function live_rtmp_sink_description() {
+        return this.live_video_encoder_description() + " ! queue ! live_mux. " +
+            this.silent_audio_to_mux_description("live_mux") + " " +
+            "flvmux name=live_mux streamable=true ! rtmpsink location=" + this.live_stream_location()
+    }
+
+    function live_rtmp_sink_with_audio_description(audio_src) {
+        return this.live_video_encoder_description() + " ! queue ! live_mux. " +
+            this.decoded_audio_to_mux_description(audio_src, "live_mux") + " " +
             "flvmux name=live_mux streamable=true ! rtmpsink location=" + this.live_stream_location()
     }
 
@@ -170,6 +196,24 @@ class PipelineController {
         return "fakesink sync=true"
     }
 
+    function sink_with_decoded_audio_description(audio_src) {
+        if (this.source.output_kind == "file") {
+            return this.encoder_description() + " ! queue ! file_mux. " +
+                this.decoded_audio_to_mux_description(audio_src, "file_mux") + " " +
+                this.muxer_description() + " name=file_mux ! filesink location=" + this.source.output_path
+        }
+        if (this.is_live_platform_output()) {
+            return this.live_rtmp_sink_with_audio_description(audio_src)
+        }
+        if (this.source.output_kind == "udp") {
+            return this.encoder_description() + " ! h264parse ! queue ! udp_mux. " +
+                this.decoded_audio_to_mux_description(audio_src, "udp_mux") + " " +
+                "mpegtsmux name=udp_mux ! udpsink host=" +
+                this.source.output_host + " port=" + this.source.output_port
+        }
+        return this.sink_description()
+    }
+
     function live_platform_ready() {
         if (this.source.output_kind == "youtube") {
             if (this.source.youtube_server_url.len() == 0 || this.source.youtube_stream_key.len() == 0) {
@@ -193,11 +237,23 @@ class PipelineController {
     }
 
     function build(num_buffers = 0) {
-        local desc = this.source_description(num_buffers) +
+        local desc = ""
+        if (this.source.kind == "uri" && this.source.uri.len() > 0 &&
+            (this.source.output_kind == "file" || this.source.output_kind == "udp" ||
+             this.is_live_platform_output())) {
+            desc = "uridecodebin name=input_decode uri=" + this.source.uri + " " +
+                this.video_processing_description("input_decode.") +
+                " ! tee name=source_tee " +
+                "source_tee. ! queue leaky=downstream max-size-buffers=2 ! " + this.preview_sink_description() + " " +
+                "source_tee. ! queue ! videoconvert ! cairooverlay name=overlay ! videoconvert ! " +
+                this.sink_with_decoded_audio_description("input_decode.")
+        } else {
+            desc = this.source_description(num_buffers) +
             " ! tee name=source_tee " +
             "source_tee. ! queue leaky=downstream max-size-buffers=2 ! " + this.preview_sink_description() + " " +
             "source_tee. ! queue ! videoconvert ! cairooverlay name=overlay ! videoconvert ! " +
             this.sink_description()
+        }
 
         local p = Gst.parse_launch(desc)
         if (p == null) return null

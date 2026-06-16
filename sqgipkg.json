@@ -8,13 +8,13 @@
     "Video",
     "GTK"
   ],
-  "gtk_theme": "SQGI-Violet-Dark",
+  "gtk_theme": "Andromeda",
   "gtk_icon_theme": "Adwaita",
   "gtk_prefer_dark": true,
   "files": [
     {
-      "path": "themes/SQGI-Violet-Dark",
-      "dest": "usr/share/themes/SQGI-Violet-Dark"
+      "path": "themes/Andromeda",
+      "dest": "usr/share/themes/Andromeda"
     },
     {
       "path": "share/logo.png",
@@ -57,15 +57,15 @@
       "cmake --build \"$SQGI_WINDOWS_BUILD_DIR\" --target sqgi sqgi-bin"
     ],
     "build_dir": "build-win",
-    "gtk_theme": "SQGI-Violet-Dark",
+    "gtk_theme": "Andromeda",
     "gtk_icon_theme": "Adwaita",
     "gtk_prefer_dark": true,
     "gtk_font_name": "Segoe UI 10",
     "gdk_backend": "win32",
     "files": [
       {
-        "path": "themes/SQGI-Violet-Dark",
-        "dest": "share/themes/SQGI-Violet-Dark"
+        "path": "themes/Andromeda",
+        "dest": "share/themes/Andromeda"
       },
       {
         "path": "share/logo.png",
